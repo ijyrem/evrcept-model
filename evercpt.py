@@ -9,6 +9,7 @@ from collections import deque, Counter
 
 
 def is_valid_sequence(seq):
+    """Check if the sequence is valid: only A, C, G, T, U and length between 10 and 10,000."""
     seq = seq.upper()
     if len(seq) >= 10000 or len(seq) < 10:
         return False
@@ -17,10 +18,12 @@ def is_valid_sequence(seq):
     return False
 
 def save_fasta(seq, filepath):
+    """Save the sequence in FASTA format."""
     with open(filepath, 'w') as f:
         f.write(f">input\n{seq}\n")
 
 def run_rnafold(fasta_file, output, circ=False):
+    """Run RNAfold on the given FASTA file and return the structure and MFE."""
     # subprocess.run(f"RNAfold --noLP --noPS {fasta_file} > {output}", shell=True)
     with open(os.path.join(output, 'seq.dbn'), 'w') as f:
         if circ:
@@ -35,6 +38,7 @@ def run_rnafold(fasta_file, output, circ=False):
     return structure, mfe
 
 def run_bprna(path):
+    """Run bpRNA on the given path and return number of stem loops and multiloops."""
     try:
         subprocess.run(['perl', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bpRNA/bpRNA.pl'), os.path.join(path, 'seq.dbn')], 
                        cwd=path, stderr=subprocess.PIPE, text=True, check=True)
@@ -55,9 +59,11 @@ def run_bprna(path):
             return 0, 0
 
 def dot2bp(dot):
+    """Calculate number of base pairs from dot-bracket notation."""
     return (len(dot) - dot.count("."))
 
 def dot2pairs(dot):
+    """Convert dot-bracket notation to base pair indices."""
     stack, pairs = deque(), []
     for i, n in enumerate(dot):
         if n == '(':
@@ -67,6 +73,7 @@ def dot2pairs(dot):
     return np.array(pairs)
 
 def dot2bp90(pairs):
+    """Calculate the 90th percentile of base pair distances."""
     distance = []
     if pairs.size > 0:
         for i in pairs:
@@ -76,6 +83,7 @@ def dot2bp90(pairs):
         return 0
 
 def dot2MLD(dot, pairs0):
+    """Calculate Maximum Ladder Distance (MLD) from dot-bracket notation and base pairs."""
     if len(pairs0) == 0:
         return 0
 
@@ -111,10 +119,12 @@ def dot2MLD(dot, pairs0):
     return MLD
 
 def structure_to_features(structure):
+    """Convert dot-bracket structure to base pair features."""
     pairs = dot2pairs(structure)
     return dot2bp(structure), dot2bp90(pairs), dot2MLD(structure, pairs)
 
 def run_cpc2(fasta_file, output):
+    """Run CPC2 on the given FASTA file and return the coding probability."""
     subprocess.run(['python', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'CPC2_standalone-1.0.1/bin/CPC2.py'), 
                             '-i', fasta_file, '-o', os.path.join(output, 'cpc')], cwd=output, check=True,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -123,17 +133,20 @@ def run_cpc2(fasta_file, output):
     return float(lines[1].split('\t')[6])
 
 def gc_at_percent(seq):
+    """Calculate GC% and AT% of the sequence."""
     gc = (seq.count('G') + seq.count('C')) / len(seq) * 100
     at = (seq.count('A') + seq.count('T')) / len(seq) * 100
     return gc, at
 
 def nuc_freq(seq):
+    """Calculate nucleotide frequencies A%, C%, G%, T%."""
     freq = []
     for i in ['A', 'C', 'G', 'T']:
         freq.append(seq.count(i) / len(seq) * 100)
     return freq
 
 def di_nuc_freq(seq):
+    """Calculate di-nucleotide frequencies."""
     valid_di = ['AA', 'AC', 'AG', 'AT', 'CA', 'CC', 'CG', 'CT', 'GA', 'GC', 'GG', 'GT', 'TA', 'TC', 'TG', 'TT']
     total = len(seq) - 1
     # Count di-nucleotides
@@ -143,22 +156,26 @@ def di_nuc_freq(seq):
     return freq
 
 def count_motifs(seq, motifs):
+    """Count presence of motifs in the sequence."""
     motifs = pd.read_csv(motifs) 
     counts = [1 if m in seq else 0 for m in motifs['motif'].tolist()]
     return np.array(counts).astype('float32').reshape(1, -1) # Reshape to 2D array for consistency
 
 def run_encoder(counts, model):
+    """Run encoder model on motif counts."""
     from tensorflow import keras
     encoder = keras.models.load_model(model)
     return encoder.predict(counts)
 
 def kmer_nmf(seq, vectorizer_file, nmf_model_file):
+    """Convert sequence to k-mer counts and apply NMF transformation."""
     vectorizer = joblib.load(vectorizer_file)
     kmer_counts = vectorizer.transform([seq])
     nmf = joblib.load(nmf_model_file)
     return nmf.transform(kmer_counts)
 
 def run_model_mrna(features, scaler, model):
+    """Run mRNA model prediction."""
     from tensorflow import keras
     scaler = joblib.load(scaler)
     features = scaler.transform(features)
@@ -166,6 +183,7 @@ def run_model_mrna(features, scaler, model):
     return model.predict(features)
 
 def run_model_circ(features, scaler, model_file):
+    """Run circRNA model prediction."""
     from sklearn.preprocessing import StandardScaler
     scaler = joblib.load(scaler)
     features = scaler.transform(features)
@@ -174,6 +192,7 @@ def run_model_circ(features, scaler, model_file):
 
 ################## Main function ##################
 def main(seq = None, type = None):
+    """Main function to process the sequence and return prediction."""
     print("DEBUG: main() called with seq =", seq, "type =", type)
     
     if seq is None:
@@ -279,6 +298,7 @@ def main(seq = None, type = None):
 
 ################## Motifs function ##################
 def table_motifs(seq):
+    """Generate a table of motif occurrences in the sequence."""
     seq = seq.strip()
     seq = ''.join(seq.split())
 
@@ -313,6 +333,7 @@ def table_motifs(seq):
     return grouped
 
 def plot_motifs(seq):
+    """Plot motif occurrences in the sequence."""
     import matplotlib.pyplot as plt
     import seaborn as sns
 
